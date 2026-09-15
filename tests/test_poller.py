@@ -1,4 +1,4 @@
-from ozon_tracker_bot.formatting import format_change
+from ozon_tracker_bot.formatting import format_change, format_event_update
 from ozon_tracker_bot.models import Order
 from ozon_tracker_bot.poller import Poller
 from ozon_tracker_bot.provider import TrackingSnapshot
@@ -34,13 +34,19 @@ def _order(order_id: int, user_id: int) -> Order:
     return Order(id=order_id, user_id=user_id, tracking_number="ABC-123", title="Тест")
 
 
-def _result(order: Order, previous_status: str | None, new_status: str) -> CheckResult:
+def _result(
+    order: Order,
+    previous_status: str | None,
+    new_status: str,
+    event_changed: bool = False,
+) -> CheckResult:
     status_changed = previous_status is not None and previous_status != new_status
     return CheckResult(
         order=order,
         snapshot=TrackingSnapshot(order.tracking_number, new_status),
         status_changed=status_changed,
         previous_status=previous_status,
+        event_changed=event_changed,
     )
 
 
@@ -66,6 +72,21 @@ async def test_poller_notifies_on_first_check_and_status_change() -> None:
         (42, format_change(first_order, None)),
         (42, format_change(changed_order, "В пути")),
     ]
+
+
+async def test_poller_notifies_on_new_milestone_without_status_change() -> None:
+    order = _order(1, 42)
+    repository = FakeRepository([order])
+    service = FakeService(
+        repository,
+        {1: _result(order, "В пути", "В пути", event_changed=True)},
+    )
+    bot = FakeBot()
+    poller = Poller(service, bot, interval_seconds=900)  # type: ignore[arg-type]
+
+    await poller.run_once()
+
+    assert bot.sent == [(42, format_event_update(order))]
 
 
 async def test_poller_swallows_check_failures() -> None:

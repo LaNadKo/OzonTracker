@@ -100,5 +100,16 @@ def format_change(order: Order, previous_status: str | None) -> str:
     return "\n".join(lines)
 
 
+def format_event_update(order: Order) -> str:
+    lines = [f"📦 <b>{escape(order.title)}</b>"]
+    if order.last_event_text:
+        lines.append(f"Новое событие: <b>{escape(order.last_event_text)}</b>")
+    if order.last_event_at:
+        lines.append(f"Время события: {format_dt(order.last_event_at)}")
+    if order.tracking_url:
+        lines.append(f'<a href="{escape(order.tracking_url, quote=True)}">Открыть трекинг</a>')
+    return "\n".join(lines)
+
+
 def format_dt(value: datetime) -> str:
     return value.astimezone().strftime("%d.%m.%Y %H:%M")

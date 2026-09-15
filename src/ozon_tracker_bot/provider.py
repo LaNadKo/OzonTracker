@@ -326,12 +326,16 @@ def parse_ozon_page_text(
 
     current = summary_events[-1]
     status = current.status or current.text
+    # The summary's last entry is the coarse status ("В пути"); the precise
+    # position is the newest dated milestone of the detailed route.
+    dated_events = [event for event in events if event.event_at is not None]
+    latest_event = dated_events[-1] if dated_events else current
     return TrackingSnapshot(
         tracking_number=tracking_number,
         status=status,
         status_code=_ozon_status_code(status),
         delivered=_is_delivered_status(status, None),
-        latest_event=current,
+        latest_event=latest_event,
         events=tuple(events),
         tracking_url=_build_tracking_link(page_url, tracking_number),
     )

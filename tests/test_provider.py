@@ -100,8 +100,10 @@ def test_parse_ozon_page_route_and_current_status() -> None:
     assert snapshot.delivered is False
     assert snapshot.tracking_url == "https://tracking.ozon.ru/?track=12345678-0001-1"
     assert snapshot.latest_event is not None
-    assert snapshot.latest_event.status == "В пути"
-    assert snapshot.latest_event.event_at is None
+    # The precise latest event is the newest dated route milestone, not the
+    # coarse summary status.
+    assert snapshot.latest_event.status == "Заказ принят перевозчиком"
+    assert snapshot.latest_event.event_at is not None
     assert any(event.status == "Заказ принят перевозчиком" for event in snapshot.events)
     assert any(event.status == "Заказ проходит импортное таможенное оформление" for event in snapshot.events)
 

@@ -14,6 +14,7 @@ class CheckResult:
     snapshot: TrackingSnapshot
     status_changed: bool
     previous_status: str | None
+    event_changed: bool = False
 
 
 class TrackingProvider(Protocol):
@@ -44,7 +45,7 @@ class TrackingService:
         except ProviderError as exc:
             await self.repository.record_error(order.id, str(exc))
             raise
-        updated, status_changed, previous_status = await self.repository.apply_snapshot(
-            order.id, snapshot
+        updated, status_changed, previous_status, event_changed = (
+            await self.repository.apply_snapshot(order.id, snapshot)
         )
-        return CheckResult(updated, snapshot, status_changed, previous_status)
+        return CheckResult(updated, snapshot, status_changed, previous_status, event_changed)

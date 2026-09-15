@@ -2,6 +2,12 @@ services:
   ozon-tracker-bot:
     build: .
     restart: unless-stopped
+    # Pin the DNS upstreams: Docker captures the host resolv.conf at start,
+    # and a later host-side switch (e.g. Tailscale MagicDNS) would otherwise
+    # leave the container with a dead resolver until the next restart.
+    dns:
+      - 192.168.50.1
+      - 8.8.8.8
     env_file:
       - .env
     volumes:

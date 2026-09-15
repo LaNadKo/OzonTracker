@@ -262,7 +262,7 @@ class Repository:
         self,
         order_id: int,
         snapshot: TrackingSnapshot,
-    ) -> tuple[Order, bool, str | None]:
+    ) -> tuple[Order, bool, str | None, bool]:
         async with self._database.sessions() as session:
             order = await session.get(Order, order_id)
             if order is None:
@@ -319,7 +319,7 @@ class Repository:
                     )
                 )
             await session.commit()
-            return order, status_changed, previous_status
+            return order, status_changed, previous_status, event_changed
 
     async def record_error(self, order_id: int, message: str) -> None:
         async with self._database.sessions() as session:
