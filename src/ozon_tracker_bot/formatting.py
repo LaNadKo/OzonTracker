@@ -27,7 +27,7 @@ def format_order(order: Order) -> str:
 def format_snapshot(snapshot: TrackingSnapshot) -> str:
     lines = [f"Статус: <b>{escape(snapshot.status)}</b>"]
     if snapshot.latest_event:
-        lines.append(f"Событие: {escape(snapshot.latest_event.text)}")
+        lines.append(f"Событие: {escape(snapshot.latest_event.full_text)}")
         if snapshot.latest_event.event_at:
             lines.append(f"Время события: {format_dt(snapshot.latest_event.event_at)}")
     if snapshot.tracking_url:

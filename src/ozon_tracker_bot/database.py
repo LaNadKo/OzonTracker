@@ -272,7 +272,7 @@ class Repository:
             status_changed = previous_status is not None and previous_status != snapshot.status
             event_changed = (
                 snapshot.latest_event is not None
-                and order.last_event_text != snapshot.latest_event.text
+                and order.last_event_text != snapshot.latest_event.full_text
             )
 
             order.current_status = snapshot.status
@@ -284,7 +284,7 @@ class Repository:
             order.error_count = 0
             order.tracking_url = snapshot.tracking_url or order.tracking_url
             if snapshot.latest_event is not None:
-                order.last_event_text = snapshot.latest_event.text
+                order.last_event_text = snapshot.latest_event.full_text
                 order.last_event_at = snapshot.latest_event.event_at
             order.updated_at = utc_now()
 
@@ -314,7 +314,7 @@ class Repository:
                         order_id=order.id,
                         status=snapshot.status,
                         status_code=snapshot.status_code,
-                        event_text=event.text if event else None,
+                        event_text=event.full_text if event else None,
                         event_at=event.event_at if event else None,
                     )
                 )

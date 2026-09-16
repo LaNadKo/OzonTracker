@@ -4,6 +4,7 @@ import pytest
 
 from ozon_tracker_bot.provider import (
     ProviderError,
+    TrackingEvent,
     _FALLBACK_CHROME_MAJOR,
     _build_chrome_ua_override,
     _build_tracking_link,
@@ -12,6 +13,20 @@ from ozon_tracker_bot.provider import (
     parse_ozon_page_text,
     parse_tracking_payload,
 )
+
+
+def test_tracking_event_full_text_combines_status_and_description() -> None:
+    milestone = TrackingEvent(
+        "Скорость оформления зависит от загруженности таможни",
+        status="Заказ проходит импортное таможенное оформление",
+    )
+    assert (
+        milestone.full_text
+        == "Заказ проходит импортное таможенное оформление — "
+        "Скорость оформления зависит от загруженности таможни"
+    )
+    assert TrackingEvent("В пути", status="В пути").full_text == "В пути"
+    assert TrackingEvent("Только описание").full_text == "Только описание"
 
 
 def test_parse_generic_payload_and_latest_event() -> None:

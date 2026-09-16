@@ -34,6 +34,13 @@ class TrackingEvent:
     source_id: str | None = None
 
     @property
+    def full_text(self) -> str:
+        """Milestone name and its description combined for display."""
+        if self.status and self.text != self.status:
+            return f"{self.status} — {self.text}"
+        return self.status or self.text
+
+    @property
     def fingerprint(self) -> str:
         raw = "\x1f".join(
             (
