@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import aliased
 
 from .models import Base, Order, ProviderConfig, RouteEvent, StatusHistory, User, utc_now
 from .provider import TrackingEvent, TrackingSnapshot
@@ -289,25 +290,57 @@ class Repository:
             order.updated_at = utc_now()
 
             if snapshot.events:
-                event_keys = [event.fingerprint for event in snapshot.events]
-                existing_keys = set(
+                existing_rows = (
                     (
                         await session.execute(
-                            select(RouteEvent.event_key).where(
-                                RouteEvent.order_id == order.id,
-                                RouteEvent.event_key.in_(event_keys),
-                            )
+                            select(RouteEvent).where(RouteEvent.order_id == order.id)
                         )
                     )
                     .scalars()
                     .all()
                 )
+                # Milestone identity is (status, description): a planned step
+                # that later receives a date is the same route event, so it is
+                # updated in place instead of being inserted a second time.
+                # Dated rows win the identity slot over legacy undated twins.
+                milestones: dict[tuple[str | None, str], RouteEvent] = {}
+                for row in existing_rows:
+                    key = (row.status, row.event_text)
+                    if key not in milestones or (
+                        milestones[key].event_at is None and row.event_at is not None
+                    ):
+                        milestones[key] = row
                 for event in snapshot.events:
-                    if event.fingerprint in existing_keys:
-                        continue
-                    session.add(_route_event_from_tracking_event(order.id, event))
+                    key = (event.status, event.text)
+                    row = milestones.get(key)
+                    if row is None:
+                        row = _route_event_from_tracking_event(order.id, event)
+                        session.add(row)
+                        milestones[key] = row
+                    elif row.event_at is None and event.event_at is not None:
+                        # The milestone completed: fill in its date in place.
+                        row.event_at = event.event_at
+                        row.event_key = event.fingerprint
 
-            if previous_status is None or status_changed or event_changed:
+                # Self-heal legacy state: drop undated rows whose milestone
+                # already has a completed (dated) twin.
+                twin = aliased(RouteEvent)
+                await session.execute(
+                    delete(RouteEvent).where(
+                        RouteEvent.order_id == order.id,
+                        RouteEvent.event_at.is_(None),
+                        select(twin.id)
+                        .where(
+                            twin.order_id == RouteEvent.order_id,
+                            twin.event_at.is_not(None),
+                            twin.status == RouteEvent.status,
+                            twin.event_text == RouteEvent.event_text,
+                        )
+                        .exists(),
+                    )
+                )
+
+            if previous_status is None or status_changed:
                 event = snapshot.latest_event
                 session.add(
                     StatusHistory(

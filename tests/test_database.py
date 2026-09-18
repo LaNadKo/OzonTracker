@@ -128,6 +128,113 @@ async def test_orders_are_isolated_per_user(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_milestone_completion_updates_route_event_without_duplicates(tmp_path) -> None:
+    database = Database(f"sqlite+aiosqlite:///{(tmp_path / 'milestones.db').as_posix()}")
+    await database.init()
+    repository = Repository(database)
+    completed_at = datetime(2026, 9, 18, 14, 22, tzinfo=timezone.utc)
+    provider = FakeProvider(
+        [
+            TrackingSnapshot(
+                "ABC-123",
+                "В пути",
+                events=(
+                    TrackingEvent(
+                        "Его доставят в сортировочный центр",
+                        status="Заказ везут в город получателя",
+                    ),
+                ),
+            ),
+            TrackingSnapshot(
+                "ABC-123",
+                "В пути",
+                events=(
+                    TrackingEvent(
+                        "Его доставят в сортировочный центр",
+                        status="Заказ везут в город получателя",
+                        event_at=completed_at,
+                    ),
+                ),
+            ),
+        ]
+    )
+    service = TrackingService(repository, provider)
+    order = await service.add_order(42, "ABC-123", "Тест")
+
+    await service.check_user_order(42, order.id)
+    await service.check_user_order(42, order.id)
+
+    route_events = await repository.get_route_events(42, order.id)
+    assert len(route_events) == 1
+    assert route_events[0].event_at == completed_at.replace(tzinfo=None)
+
+    history = await repository.get_history(42, order.id)
+    assert len(history) == 1
+
+    await database.close()
+
+
+@pytest.mark.asyncio
+async def test_legacy_undated_twin_is_cleaned_up(tmp_path) -> None:
+    from ozon_tracker_bot.models import RouteEvent
+
+    database = Database(f"sqlite+aiosqlite:///{(tmp_path / 'twins.db').as_posix()}")
+    await database.init()
+    repository = Repository(database)
+    completed_at = datetime(2026, 9, 18, 14, 22, tzinfo=timezone.utc)
+    provider = FakeProvider(
+        [
+            TrackingSnapshot(
+                "ABC-123",
+                "В пути",
+                events=(
+                    TrackingEvent(
+                        "Его доставят в сортировочный центр",
+                        status="Заказ везут в город получателя",
+                    ),
+                ),
+            ),
+            TrackingSnapshot(
+                "ABC-123",
+                "В пути",
+                events=(
+                    TrackingEvent(
+                        "Его доставят в сортировочный центр",
+                        status="Заказ везут в город получателя",
+                        event_at=completed_at,
+                    ),
+                ),
+            ),
+        ]
+    )
+    service = TrackingService(repository, provider)
+    order = await service.add_order(42, "ABC-123", "Тест")
+    await service.check_user_order(42, order.id)
+
+    # Simulate the legacy bug: a dated twin row inserted alongside the
+    # undated one instead of updating it.
+    async with database.sessions() as session:
+        session.add(
+            RouteEvent(
+                order_id=order.id,
+                event_key="legacy-dated-fingerprint",
+                status="Заказ везут в город получателя",
+                event_text="Его доставят в сортировочный центр",
+                event_at=completed_at,
+            )
+        )
+        await session.commit()
+
+    await service.check_user_order(42, order.id)
+
+    route_events = await repository.get_route_events(42, order.id)
+    assert len(route_events) == 1
+    assert route_events[0].event_at == completed_at.replace(tzinfo=None)
+
+    await database.close()
+
+
+@pytest.mark.asyncio
 async def test_seeded_usernames_bind_once_to_telegram_id(tmp_path) -> None:
     database = Database(f"sqlite+aiosqlite:///{(tmp_path / 'users.db').as_posix()}")
     await database.init()
