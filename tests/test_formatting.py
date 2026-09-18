@@ -15,6 +15,46 @@ def _route_event(event_key: str, status: str, text: str, event_at, received_at) 
     )
 
 
+def test_timeline_marks_undated_steps_before_last_dated_as_completed() -> None:
+    route_events = [
+        _route_event(
+            "k1",
+            "Заказ везут на таможню в стране отправления",
+            "Обычно это занимает до 10 дней",
+            datetime(2026, 9, 14, 11, 52, tzinfo=timezone.utc),
+            datetime(2026, 9, 18, 20, 11, tzinfo=timezone.utc),
+        ),
+        _route_event(
+            "k2",
+            "Заказ привезли на таможню для экспортного таможенного оформления",
+            "Скорость оформления зависит от загруженности таможни",
+            None,
+            datetime(2026, 9, 18, 20, 11, tzinfo=timezone.utc),
+        ),
+        _route_event(
+            "k3",
+            "Заказ покинул зону экспортного таможенного оформления",
+            "Заказ спешит в страну назначения",
+            datetime(2026, 9, 15, 6, 12, tzinfo=timezone.utc),
+            datetime(2026, 9, 18, 20, 11, tzinfo=timezone.utc),
+        ),
+        _route_event(
+            "k4",
+            "Заказ в пункте выдачи",
+            "Успейте забрать его в течение 14 дней",
+            None,
+            datetime(2026, 9, 18, 20, 11, tzinfo=timezone.utc),
+        ),
+    ]
+
+    result = format_timeline([], route_events)
+
+    assert "✅ Заказ привезли на таможню для экспортного таможенного оформления" in result
+    assert "⏳ Заказ в пункте выдачи" in result
+    assert "14.09.2026" in result
+    assert "15.09.2026" in result
+
+
 def test_timeline_keeps_real_dates_and_marks_planned_steps() -> None:
     route_events = [
         _route_event(

@@ -325,18 +325,22 @@ def parse_ozon_page_text(
     )
     summary_events = _parse_ozon_events(lines[expected_index + 2 : marker_index])
     expanded_events = _parse_ozon_events(lines[marker_index + 1 :])
-    events = _order_events_for_timeline(
-        _deduplicate_events(summary_events + expanded_events)
-    )
     if not summary_events:
         raise ProviderError("Ozon Track вернул страницу без текущего статуса.")
 
     current = summary_events[-1]
     status = current.status or current.text
-    # The summary's last entry is the coarse status ("В пути"); the precise
-    # position is the newest dated milestone of the detailed route.
-    dated_events = [event for event in events if event.event_at is not None]
+    # The summary's last entry is the coarse position marker ("В пути"); the
+    # precise position is the newest dated milestone of the detailed route.
+    all_events = (*summary_events, *expanded_events)
+    dated_events = [event for event in all_events if event.event_at is not None]
     latest_event = dated_events[-1] if dated_events else current
+    # The route keeps the page's sequence order (it is chronological). The
+    # undated coarse marker is not a milestone and is dropped from the route.
+    route_source = list(summary_events) + list(expanded_events)
+    if current.event_at is None:
+        route_source.remove(current)
+    events = _deduplicate_events(route_source)
     return TrackingSnapshot(
         tracking_number=tracking_number,
         status=status,
@@ -346,17 +350,6 @@ def parse_ozon_page_text(
         events=tuple(events),
         tracking_url=_build_tracking_link(page_url, tracking_number),
     )
-
-
-def _order_events_for_timeline(events: list[TrackingEvent]) -> list[TrackingEvent]:
-    """Completed events keep chronological order; planned (undated) steps
-    preserve their page order and come after the dated history."""
-    dated = sorted(
-        (event for event in events if event.event_at is not None),
-        key=lambda event: event.event_at,
-    )
-    undated = [event for event in events if event.event_at is None]
-    return dated + undated
 
 
 def _build_tracking_link(page_url: str, tracking_number: str) -> str:

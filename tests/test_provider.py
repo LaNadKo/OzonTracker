@@ -123,7 +123,7 @@ def test_parse_ozon_page_route_and_current_status() -> None:
     assert any(event.status == "Заказ проходит импортное таможенное оформление" for event in snapshot.events)
 
 
-def test_parse_ozon_page_orders_events_chronologically() -> None:
+def test_parse_ozon_page_keeps_sequence_order_and_drops_coarse_marker() -> None:
     snapshot = parse_ozon_page_text(
         """
         OZON Track
@@ -152,14 +152,15 @@ def test_parse_ozon_page_orders_events_chronologically() -> None:
         "12345678-0001-1",
     )
 
-    dated_statuses = [event.status for event in snapshot.events if event.event_at is not None]
-    undated_statuses = [event.status for event in snapshot.events if event.event_at is None]
-    assert dated_statuses == [
+    statuses = [event.status for event in snapshot.events]
+    assert statuses == [
         "Создан",
         "Передается в доставку",
         "Заказ принят перевозчиком",
+        "Заказ везут на таможню в стране отправления",
+        "Заказ в пункте выдачи",
     ]
-    assert undated_statuses == ["В пути", "Заказ везут на таможню в стране отправления", "Заказ в пункте выдачи"]
+    assert all(event.status != "В пути" for event in snapshot.events)
 
 
 def test_tracking_link_keeps_only_track_parameter() -> None:

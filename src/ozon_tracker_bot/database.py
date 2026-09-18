@@ -5,7 +5,6 @@ from pathlib import Path
 from sqlalchemy import delete, desc, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import aliased
 
 from .models import Base, Order, ProviderConfig, RouteEvent, StatusHistory, User, utc_now
 from .provider import TrackingEvent, TrackingSnapshot
@@ -226,9 +225,9 @@ class Repository:
             statement = (
                 select(RouteEvent)
                 .where(RouteEvent.order_id == order_id)
-                # Timeline order: completed events oldest→newest, then planned
-                # (undated) steps in their page order via insertion id.
-                .order_by(RouteEvent.event_at.asc().nulls_last(), RouteEvent.id.asc())
+                # Rows are replaced wholesale on every check in the page's
+                # sequence order, so insertion id mirrors the route order.
+                .order_by(RouteEvent.id.asc())
                 .limit(limit)
             )
             return list((await session.execute(statement)).scalars().all())
@@ -290,55 +289,15 @@ class Repository:
             order.updated_at = utc_now()
 
             if snapshot.events:
-                existing_rows = (
-                    (
-                        await session.execute(
-                            select(RouteEvent).where(RouteEvent.order_id == order.id)
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                # Milestone identity is (status, description): a planned step
-                # that later receives a date is the same route event, so it is
-                # updated in place instead of being inserted a second time.
-                # Dated rows win the identity slot over legacy undated twins.
-                milestones: dict[tuple[str | None, str], RouteEvent] = {}
-                for row in existing_rows:
-                    key = (row.status, row.event_text)
-                    if key not in milestones or (
-                        milestones[key].event_at is None and row.event_at is not None
-                    ):
-                        milestones[key] = row
-                for event in snapshot.events:
-                    key = (event.status, event.text)
-                    row = milestones.get(key)
-                    if row is None:
-                        row = _route_event_from_tracking_event(order.id, event)
-                        session.add(row)
-                        milestones[key] = row
-                    elif row.event_at is None and event.event_at is not None:
-                        # The milestone completed: fill in its date in place.
-                        row.event_at = event.event_at
-                        row.event_key = event.fingerprint
-
-                # Self-heal legacy state: drop undated rows whose milestone
-                # already has a completed (dated) twin.
-                twin = aliased(RouteEvent)
+                # The Ozon page always lists the whole route in sequence
+                # order; replace the stored route wholesale so row order
+                # matches the page and completed steps never linger as
+                # planned twins.
                 await session.execute(
-                    delete(RouteEvent).where(
-                        RouteEvent.order_id == order.id,
-                        RouteEvent.event_at.is_(None),
-                        select(twin.id)
-                        .where(
-                            twin.order_id == RouteEvent.order_id,
-                            twin.event_at.is_not(None),
-                            twin.status == RouteEvent.status,
-                            twin.event_text == RouteEvent.event_text,
-                        )
-                        .exists(),
-                    )
+                    delete(RouteEvent).where(RouteEvent.order_id == order.id)
                 )
+                for event in snapshot.events:
+                    session.add(_route_event_from_tracking_event(order.id, event))
 
             if previous_status is None or status_changed:
                 event = snapshot.latest_event

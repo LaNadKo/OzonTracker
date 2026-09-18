@@ -88,8 +88,10 @@ async def test_status_history_and_delivered_stop_polling(tmp_path) -> None:
 
     history = await repository.get_history(42, order.id)
     assert [item.status for item in history] == ["Доставлено", "В пути", "Принято"]
+    # The route is replaced wholesale on every check, so only the latest
+    # snapshot's milestones remain.
     route_events = await repository.get_route_events(42, order.id)
-    assert [item.location for item in route_events] == ["Москва", "Казань", "Казань"]
+    assert [item.location for item in route_events] == ["Казань"]
     assert route_events[0].courier == "Ozon Доставка"
 
     await repository.archive_order(42, order.id)

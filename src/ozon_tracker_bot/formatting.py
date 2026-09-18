@@ -50,7 +50,14 @@ def format_timeline(status_history: list[StatusHistory], route_events: list[Rout
     lines: list[str] = []
     if route_events:
         lines.append("<b>Путь отправления</b>")
-        for event in route_events:
+        # The route is in page (sequence) order: any undated step before the
+        # last dated one has necessarily completed — Ozon simply does not
+        # show dates for every milestone.
+        last_dated_index = max(
+            (index for index, item in enumerate(route_events) if item.event_at is not None),
+            default=-1,
+        )
+        for index, event in enumerate(route_events):
             details: list[str] = []
             if event.status:
                 details.append(escape(event.status))
@@ -59,14 +66,12 @@ def format_timeline(status_history: list[StatusHistory], route_events: list[Rout
             if event.courier:
                 details.append(f"служба: {escape(event.courier)}")
             suffix = f" — {'; '.join(details)}" if details else ""
-            # Undated route steps are planned milestones on the Ozon page;
-            # showing the insert time would fabricate a history that never
-            # happened, so they are marked as upcoming instead.
             if event.event_at is not None:
                 lines.append(f"• {format_dt(event.event_at)}{suffix}")
+            elif index < last_dated_index:
+                lines.append(f"• ✅ {escape(event.status or event.event_text)}")
             else:
-                planned = escape(event.status or event.event_text)
-                lines.append(f"• ⏳ {planned}")
+                lines.append(f"• ⏳ {escape(event.status or event.event_text)}")
             if event.event_text and event.event_text != event.status:
                 lines.append(f"  {escape(event.event_text)}")
     elif status_history:
