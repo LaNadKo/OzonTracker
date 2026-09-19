@@ -79,6 +79,13 @@ def order_keyboard(
                 )
             ]
         )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="📬 Получено", callback_data=f"order:received:{order_id}"
+                )
+            ]
+        )
     if archived:
         rows.append(
             [

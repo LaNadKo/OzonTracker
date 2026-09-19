@@ -84,6 +84,7 @@ async def test_status_history_and_delivered_stop_polling(tmp_path) -> None:
     assert second.previous_status == "Принято"
     assert third.order.is_delivered is True
     assert third.order.is_active is False
+    assert third.order.is_archived is True  # delivered orders auto-archive
     assert await repository.list_pollable_orders() == []
 
     history = await repository.get_history(42, order.id)
@@ -98,6 +99,27 @@ async def test_status_history_and_delivered_stop_polling(tmp_path) -> None:
     restored = await repository.restore_order(42, order.id)
     assert restored.is_archived is False
     assert restored.is_active is False  # delivered orders stay terminal after restore
+
+    await database.close()
+
+
+@pytest.mark.asyncio
+async def test_mark_received_archives_order(tmp_path) -> None:
+    database = Database(f"sqlite+aiosqlite:///{(tmp_path / 'received.db').as_posix()}")
+    await database.init()
+    repository = Repository(database)
+
+    order = await repository.add_order(42, "ABC-123", "Тест")
+    updated = await repository.mark_received(42, order.id)
+
+    assert updated.is_delivered is True
+    assert updated.is_archived is True
+    assert updated.current_status == "Заказ получен в пункте выдачи"
+    assert updated.current_status_code == "delivered"
+    assert await repository.list_pollable_orders() == []
+    history = await repository.get_history(42, order.id)
+    assert history[0].status == "Заказ получен в пункте выдачи"
+    assert history[0].event_text == "Подтверждено пользователем"
 
     await database.close()
 

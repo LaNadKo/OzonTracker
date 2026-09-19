@@ -277,7 +277,6 @@ _OZON_PAGE_IGNORED_LINES = {
     "Ожидаемая дата доставки",
     "Показать больше",
     "Показать меньше",
-    "Заказ получен в пункте выдачи",
 }
 
 _OZON_PAGE_STATUS_LINES = {
@@ -335,6 +334,14 @@ def parse_ozon_page_text(
     all_events = (*summary_events, *expanded_events)
     dated_events = [event for event in all_events if event.event_at is not None]
     latest_event = dated_events[-1] if dated_events else current
+    # Coarse status ladder: once the pickup-point milestones complete, they
+    # promote the coarse status past "В пути" (the summary itself never
+    # leaves "В пути" even after the shipment is handed out).
+    completed_statuses = {event.status for event in dated_events}
+    if "Заказ получен в пункте выдачи" in completed_statuses:
+        status = "Заказ получен в пункте выдачи"
+    elif "Заказ в пункте выдачи" in completed_statuses:
+        status = "Заказ в пункте выдачи"
     # The route keeps the page's sequence order (it is chronological). The
     # undated coarse marker is not a milestone and is dropped from the route.
     route_source = list(summary_events) + list(expanded_events)
@@ -441,10 +448,10 @@ def _ozon_status_code(status: str) -> str | None:
         return "created"
     if "тамож" in normalized:
         return "customs"
-    if "пункт" in normalized:
-        return "pickup"
     if "получен" in normalized or "доставлен" in normalized:
         return "delivered"
+    if "пункт" in normalized:
+        return "pickup"
     if "пути" in normalized or "везут" in normalized:
         return "in_transit"
     if "переда" in normalized:

@@ -38,6 +38,7 @@ def test_order_keyboard_exposes_inline_actions() -> None:
         "order:status:7",
         "order:history:7",
         "order:refresh:7",
+        "order:received:7",
         "order:rename:7",
         "order:archive:7",
     ]

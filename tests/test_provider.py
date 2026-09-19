@@ -174,6 +174,63 @@ def test_tracking_link_keeps_only_track_parameter() -> None:
     assert _build_tracking_link("not-an-absolute-url", "ABC") == "not-an-absolute-url"
 
 
+def test_parse_ozon_page_promotes_pickup_status_ladder() -> None:
+    at_pickup = parse_ozon_page_text(
+        """
+        OZON Track
+        Проверка статуса вашей доставки
+        12345678-0001-1
+        Отследить
+        Ожидаемая дата доставки
+        с 15.09.26 до 21.09.26
+        Создан
+        11.09.26, 22:36
+        Мы получили заказ, продавец уже собирает его
+        В пути
+        15.09.26 - 21.09.26
+        Показать больше
+        Заказ в пункте выдачи
+        19.09.26, 16:26
+        Успейте забрать его в течение 14 дней.
+        Заказ получен в пункте выдачи
+        © 1998 – 2026 ООО «Интернет Решения»
+        """,
+        "12345678-0001-1",
+    )
+    assert at_pickup.status == "Заказ в пункте выдачи"
+    assert at_pickup.status_code == "pickup"
+    assert at_pickup.delivered is False
+    statuses = [event.status for event in at_pickup.events]
+    assert "Заказ получен в пункте выдачи" in statuses
+
+    received = parse_ozon_page_text(
+        """
+        OZON Track
+        Проверка статуса вашей доставки
+        12345678-0001-1
+        Отследить
+        Ожидаемая дата доставки
+        с 15.09.26 до 21.09.26
+        Создан
+        11.09.26, 22:36
+        Мы получили заказ, продавец уже собирает его
+        В пути
+        15.09.26 - 21.09.26
+        Показать больше
+        Заказ в пункте выдачи
+        19.09.26, 16:26
+        Успейте забрать его в течение 14 дней.
+        Заказ получен в пункте выдачи
+        20.09.26, 12:05
+        © 1998 – 2026 ООО «Интернет Решения»
+        """,
+        "12345678-0001-1",
+    )
+    assert received.status == "Заказ получен в пункте выдачи"
+    assert received.status_code == "delivered"
+    assert received.delivered is True
+
+
 def test_parse_ozon_page_rejects_page_without_tracking_result() -> None:
     with pytest.raises(ProviderError, match="не вернул данные"):
         parse_ozon_page_text(

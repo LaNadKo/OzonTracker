@@ -279,6 +279,9 @@ class Repository:
             order.current_status_code = snapshot.status_code
             order.is_delivered = snapshot.delivered
             order.is_active = not snapshot.delivered
+            if snapshot.delivered:
+                # Delivered orders move to the archive and stop polling.
+                order.is_archived = True
             order.last_checked_at = utc_now()
             order.last_error = None
             order.error_count = 0
@@ -312,6 +315,30 @@ class Repository:
                 )
             await session.commit()
             return order, status_changed, previous_status, event_changed
+
+    async def mark_received(self, user_id: int, order_id: int) -> Order:
+        """Manual confirmation: the page may never register the handout."""
+        async with self._database.sessions() as session:
+            order = await self._get_order_in_session(session, user_id, order_id)
+            order.is_delivered = True
+            order.is_active = False
+            order.is_archived = True
+            order.current_status = "Заказ получен в пункте выдачи"
+            order.current_status_code = "delivered"
+            order.last_error = None
+            order.error_count = 0
+            order.last_checked_at = utc_now()
+            order.updated_at = utc_now()
+            session.add(
+                StatusHistory(
+                    order_id=order.id,
+                    status="Заказ получен в пункте выдачи",
+                    status_code="delivered",
+                    event_text="Подтверждено пользователем",
+                )
+            )
+            await session.commit()
+            return order
 
     async def record_error(self, order_id: int, message: str) -> None:
         async with self._database.sessions() as session:

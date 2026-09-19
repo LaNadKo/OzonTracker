@@ -573,6 +573,21 @@ def build_router(service: TrackingService, settings: Settings) -> Router:
             )
             return
 
+        if action == "received":
+            try:
+                order = await service.repository.mark_received(
+                    callback.from_user.id, order_id
+                )
+            except OrderNotFoundError as exc:
+                await callback.answer(str(exc), show_alert=True)
+                return
+            await send_callback(
+                callback,
+                f"✅ Отмечено как полученное. Заказ перемещён в архив.\n\n{format_order(order)}",
+                order_keyboard(order.id, archived=True, delivered=True),
+            )
+            return
+
         if action == "archive":
             try:
                 order = await service.repository.archive_order(callback.from_user.id, order_id)
